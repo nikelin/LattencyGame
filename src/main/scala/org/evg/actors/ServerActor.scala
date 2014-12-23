@@ -5,13 +5,14 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor._
 import akka.io.Tcp.{Connected}
-import akka.io.{IO, Tcp}
+import akka.io.{Tcp, IO}
 import akka.pattern.ask
 import akka.util.Timeout
 import org.evg.actors.adapters.{Complete, Bind}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
+import scala.util.{Failure, Success}
 
 /**
  * Created by Cyril on 22.12.2014.
@@ -23,11 +24,23 @@ class ServerActor extends Actor with ActorLogging {
   override def receive : Receive = {
     case StartServer(ioActor : ActorRef, port, host) => {
       implicit val actorSystem = context.system
-      implicit val timeout = Timeout(Duration(15, TimeUnit.SECONDS))
-      val future = ioActor ? Bind(host, port)
+      val senderRef : ActorRef = sender()
+      implicit val timeout = Timeout(Duration(5, TimeUnit.SECONDS))
+      val future = ioActor ? Bind(self, host, port)
       future.onComplete( (e) => {
-        sender() ! Bound(host, port)
+        e match {
+          case Success(Bound(host, port)) => {
+            self ! Bound(host, port)
+            senderRef ! Bound(host, port)
+          }
+          case Failure(e : Throwable) => {
+            log.error(e, "FAIL: Server not started")
+          }
+        }
       })
+    }
+    case Bound(host : String, port : Int ) => {
+      log.info(f"Server started on $host:$port")
     }
     case Connected(_, address) => {
       log.info("Receiving client connection - " + address );
