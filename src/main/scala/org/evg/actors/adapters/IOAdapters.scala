@@ -7,23 +7,25 @@ import akka.pattern.ask
 import akka.util.Timeout
 import org.evg.actors.Bound
 import scala.concurrent.ExecutionContext.Implicits.global
-import akka.actor.Actor
+import akka.actor.{ActorRef, Actor}
 import akka.io.{Tcp, IO}
 
 import scala.concurrent.duration.Duration
+import scala.util.Success
 
 /**
  * Created by Cyril on 23.12.2014.
  */
 class AkkaIOAdapter extends Actor {
-  implicit val system = context.system
 
   override def receive: Receive = {
-    case Bind(host : String, port : Int) => {
+    case Bind(ref : ActorRef, host : String, port : Int) => {
+      implicit val system = context.system
+      val senderRef : ActorRef = sender()
       implicit val timeout = Timeout(Duration(5, TimeUnit.SECONDS))
-      val result = IO(Tcp) ? Tcp.Bind(handler = sender(), localAddress = new InetSocketAddress(host, port))
+      val result = IO(Tcp) ? Tcp.Bind(handler = ref, localAddress = new InetSocketAddress(host, port))
       result.onComplete((e) => {
-        sender() ! Bound(host, port)
+        senderRef ! Bound(host, port)
       })
     }
   }
@@ -31,11 +33,11 @@ class AkkaIOAdapter extends Actor {
 
 class IOAdapterMock extends Actor {
   override def receive: Receive = {
-    case Bind(host : String, port : Int) => {
-      sender() ! Bound(host, port)
+    case Bind(ref : ActorRef, host : String, port : Int) => {
+      ref ! Bound(host, port)
     }
   }
 }
 
-case class Bind( host : String, port : Int )
+case class Bind( ref : ActorRef, host : String, port : Int )
 case class Complete()
